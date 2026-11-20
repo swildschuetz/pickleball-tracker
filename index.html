@@ -48,6 +48,25 @@ td.n{font-weight:600}
 <div id="v"></div>
 </main>
 <script>
+window.__fbP=(async()=>{
+  const V='10.14.1',B='https://www.gstatic.com/firebasejs/'+V+'/';
+  const [app,fs]=await Promise.all([import(B+'firebase-app.js'),import(B+'firebase-firestore.js')]);
+  const a=app.initializeApp({
+    apiKey:"AIzaSyDbRagfiIc0shyIPTAP_CTROYVesNsH1CA",
+    authDomain:"pickleball-tracker-ccacf.firebaseapp.com",
+    projectId:"pickleball-tracker-ccacf",
+    storageBucket:"pickleball-tracker-ccacf.firebasestorage.app",
+    messagingSenderId:"969655317847",
+    appId:"1:969655317847:web:5c5bbbd301f4b49863fa12"
+  });
+  const d=fs.getFirestore(a);
+  return{
+    doc:p=>({set:x=>fs.setDoc(fs.doc(d,p),x),delete:()=>fs.deleteDoc(fs.doc(d,p))}),
+    collection:n=>({onSnapshot:(ok,er)=>fs.onSnapshot(fs.collection(d,n),ok,er)})
+  };
+})();
+</script>
+<script>
 const KEY='pb-tracker-v1';
 let S={players:[],matches:[]};
 try{const r=localStorage.getItem(KEY);if(r)S=JSON.parse(r)}catch(e){}
@@ -66,24 +85,22 @@ function roMsg(){return '<div class="card">👀 Du hast Leserechte: Tabelle und 
 (async()=>{
  await 0;
  try{
-  if(typeof claude==='undefined'||!claude.use){return}
-  const [db,user]=await Promise.all([claude.use('db'),claude.use('user')]);
-  if(user){try{if(await user.can('data.write')===false){ro=true;tab='table'}}catch(e){}}
-  if(!db){NOTE='Offline-Modus: Daten liegen nur auf diesem Gerät.';render();return}
-  DB=db;S={players:[],matches:[]};NOTE='Lade Daten…';render();
+  DB=await window.__fbP;
+  S={players:[],matches:[]};NOTE='Lade Daten…';render();
   const tm=setTimeout(()=>{NOTE='Daten noch nicht erreichbar, Stand evtl. veraltet.';render()},10000);
-  const er=()=>{clearTimeout(tm);NOTE='Fehler beim Laden der Daten.';render()};
-  db.collection('players').onSnapshot(s=>{clearTimeout(tm);NOTE='';S.players=s.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>a.name.localeCompare(b.name));render()},er);
-  db.collection('matches').onSnapshot(s=>{clearTimeout(tm);NOTE='';S.matches=s.docs.map(d=>({id:d.id,...d.data()})).sort((x,y)=>x.t-y.t);render()},er);
- }catch(e){}
+  const er=()=>{clearTimeout(tm);NOTE='Fehler beim Laden der Daten. Prüfe die Firestore-Regeln.';render()};
+  DB.collection('players').onSnapshot(s=>{clearTimeout(tm);NOTE='';S.players=s.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>a.name.localeCompare(b.name));render()},er);
+  DB.collection('matches').onSnapshot(s=>{clearTimeout(tm);NOTE='';S.matches=s.docs.map(d=>({id:d.id,...d.data()})).sort((x,y)=>x.t-y.t);render()},er);
+ }catch(e){DB=null;NOTE='Offline-Modus: Keine Verbindung zur Datenbank, Daten liegen nur auf diesem Gerät.';render()}
 })();
+
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const nm=id=>{const p=S.players.find(p=>p.id===id);return p?esc(p.name):'?'};
 const fmt=(n,d=1)=>isFinite(n)?n.toFixed(d).replace('.',','):'–';
 
-function stats(){
+function stats(ms=M()){
   const st={};S.players.forEach(p=>st[p.id]={id:p.id,name:p.name,g:0,w:0,l:0,pf:0,pa:0,part:{},opp:{}});
-  S.matches.forEach(m=>{
+  ms.forEach(m=>{
     [[m.a,m.sa,m.sb],[m.b,m.sb,m.sa]].forEach(([team,f,a])=>team.forEach(id=>{
       const s=st[id];if(!s)return;
       s.g++;s.pf+=f;s.pa+=a;f>a?s.w++:s.l++;
@@ -120,7 +137,7 @@ function suggest(){
 }
 
 function nav(){
-  const T=[['play','Spiel'],['table','Tabelle'],['pro','Profil'],['hist','Verlauf'],['pl','Spieler']];
+  const T=[['play','Spiel'],['table','Tabelle'],['ew','Ewige Tabelle'],['pro','Profil'],['du','Duelle'],['tm','Teams'],['hist','Verlauf'],['pl','Spieler']];
   document.getElementById('nav').innerHTML=T.map(([k,l])=>`<button class="${tab===k?'on':''}" data-t="${k}">${l}</button>`).join('');
   document.querySelectorAll('#nav button').forEach(b=>b.onclick=()=>{tab=b.dataset.t;render()});
 }
@@ -136,7 +153,7 @@ function vPlay(){if(ro)return roMsg();
   <div class="mu" style="margin-top:6px">Für Einzel je nur einen Spieler pro Team wählen.</div>
   <div class="vs"><div class="team" id="ta">${cur?[cur[0],cur[1]].filter(Boolean).map(nm).join(' & ')||'–':'–'}</div><span class="mu">vs</span><div class="team" id="tb">${cur?[cur[2],cur[3]].filter(Boolean).map(nm).join(' & ')||'–':'–'}</div></div>
   ${sitOut?`<div class="mu">Pause: ${sitOut.map(nm).join(', ')}</div>`:''}
-  <div class="sc" style="margin-top:10px"><input id="sa" type="number" inputmode="numeric" min="0" placeholder="0"><span class="mu">:</span><input id="sb" type="number" inputmode="numeric" min="0" placeholder="0"></div>
+  <div class="row" style="margin-top:10px"><span class="mu" style="flex:none">Spieldatum</span><input id="dt" type="date" value="${today()}"></div><div class="sc" style="margin-top:10px"><input id="sa" type="number" inputmode="numeric" min="0" placeholder="0"><span class="mu">:</span><input id="sb" type="number" inputmode="numeric" min="0" placeholder="0"></div>
   <div class="row" style="margin-top:10px"><button class="pri" id="sv">Ergebnis speichern</button></div><div id="err" class="mu" style="color:var(--rd);margin-top:6px"></div></div>`;
   return h;
 }
@@ -154,13 +171,13 @@ function bindPlay(){
     if(!a.length||a.length!==b.length){e.textContent='Beide Teams brauchen gleich viele Spieler (1 oder 2).';return}
     if(new Set([...a,...b]).size!==a.length+b.length){e.textContent='Ein Spieler ist doppelt gewählt.';return}
     if(isNaN(sa)||isNaN(sb)||sa===sb){e.textContent='Bitte ein gültiges Ergebnis ohne Unentschieden eintragen.';return}
-    addMatch({id:uid(),t:Date.now(),a,b,sa,sb});cur=null;sitOut=null;render();
+    addMatch({id:uid(),t:matchT(),a,b,sa,sb});document.getElementById('sa').value='';document.getElementById('sb').value='';cur=null;sitOut=null;render();
   };
 }
 
 function vTable(){
   const rows=stats().filter(s=>s.g>0||true);
-  if(!S.matches.length)return `<div class="card">Noch keine Spiele eingetragen.</div>`;
+  if(!M().length)return `<div class="card">Noch keine Spiele in diesem Zeitraum.</div>`;
   rows.sort((x,y)=>{const a=isNaN(x[sortK])?-1e9:x[sortK],b=isNaN(y[sortK])?-1e9:y[sortK];return typeof x[sortK]==='string'?sortD*x[sortK].localeCompare(y[sortK]):sortD*(a-b)});
   const cols=[['name','Spieler'],['g','Sp'],['w','S'],['l','N'],['quote','Quote %'],['pf','Punkte'],['avgPts','Ø Pkt'],['avgOpp','Ø Gegner'],['diff','Ø Diff']];
   let h=`<div class="card tw"><table><thead><tr>${cols.map(([k,l])=>`<th data-k="${k}">${l}${sortK===k?(sortD<0?' ↓':' ↑'):''}</th>`).join('')}</tr></thead><tbody>`;
@@ -168,6 +185,7 @@ function vTable(){
   h+=`</tbody></table><div class="mu" style="margin-top:8px">Tippe auf eine Spaltenüberschrift zum Sortieren. Ø Pkt = eigene Punkte pro Spiel.</div></div>`;
   const mx=Math.max(1,...stats().map(s=>s.pf));
   h+=`<div class="card"><b>Ranking Einzelpunkte</b> <span class="mu">(alle erzielten Punkte, auch bei Niederlagen)</span>`+stats().sort((a,b)=>b.pf-a.pf).map((s,i)=>`<div style="margin-top:8px"><div class="row" style="justify-content:space-between"><span>${i+1}. <b>${esc(s.name)}</b></span><span class="w" style="text-align:right">${s.pf}</span></div><div style="height:6px;background:var(--ac2);border-radius:3px"><div style="height:6px;width:${s.pf/mx*100}%;background:var(--ac);border-radius:3px"></div></div></div>`).join('')+`</div>`;
+  h+=`<div class="card"><b>Formkurve</b> <span class="mu">(letzte 10 Spiele, links alt → rechts neu)</span>`+S.players.map(p=>`<div class="m"><span><b>${esc(p.name)}</b></span><span>${formHtml(p.id)||'<span class="mu">–</span>'}</span></div>`).join('')+`</div>`;
   let best='';
   stats().forEach(s=>{
     const arr=Object.entries(s.part).filter(([,q])=>q.g>=2).map(([id,q])=>({id,g:q.g,r:q.w/q.g})).sort((a,b)=>b.r-a.r||b.g-a.g);
@@ -179,7 +197,7 @@ function vTable(){
 
 function vHist(){
   if(!S.matches.length)return `<div class="card">Noch keine Spiele.</div>`;
-  return `<div class="card">`+[...S.matches].reverse().map(m=>{
+  return `<div class="card">`+[...M()].reverse().map(m=>{
     const d=new Date(m.t).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'});
     const aw=m.sa>m.sb;
     return `<div class="m"><div><div class="${aw?'w':''}">${m.a.map(nm).join(' & ')}</div><div class="${aw?'':'w'}">${m.b.map(nm).join(' & ')}</div></div><div style="text-align:right"><div class="w">${m.sa} : ${m.sb}</div><div class="mu">${d}</div></div>${ro?'':`<button class="del" data-d="${m.id}">✕</button>`}</div>`;
@@ -197,10 +215,10 @@ function vPro(){
   const line=x=>x?`${nm(x.id)} <span class="mu">· ${x.w} S / ${x.g-x.w} N</span>`:'<span class="mu">noch offen</span>';
   const k=(l,v)=>`<div class="team"><div class="mu" style="font-weight:400">${l}</div>${v}</div>`;
   const g3='style="grid-template-columns:1fr 1fr 1fr"';
-  const my=[...S.matches].reverse().filter(m=>m.a.includes(selP)||m.b.includes(selP));
+  const my=[...M()].reverse().filter(m=>m.a.includes(selP)||m.b.includes(selP));
   let h=`<div class="card"><select id="ps">${S.players.map(p=>`<option value="${p.id}" ${p.id===selP?'selected':''}>${esc(p.name)}</option>`).join('')}</select>
   <div class="vs" ${g3}>${k('Spiele',s.g)}${k('Siege',s.w+' ('+fmt(s.quote,0)+'%)')}${k('Ø Punkte',fmt(s.avgPts))}</div>
-  <div class="vs" ${g3}>${k('Punkte',s.pf)}${k('Ø Gegner',fmt(s.avgOpp))}${k('Ø Diff',(s.diff>0?'+':'')+fmt(s.diff))}</div></div>`;
+  <div class="vs" ${g3}>${k('Punkte',s.pf)}${k('Ø Gegner',fmt(s.avgOpp))}${k('Ø Diff',(s.diff>0?'+':'')+fmt(s.diff))}</div><div class="m" style="border:0"><span>Form (letzte 10)</span><span>${formHtml(selP)||'–'}</span></div></div>`;
   h+=`<div class="card"><div class="m"><span>🤝 <b>Bester Mitspieler</b></span><span>${line(bp)}</span></div><div class="m"><span>💪 <b>Härtester Gegner</b></span><span>${line(hd)}</span></div><div class="mu" style="margin-top:6px">Bester Mitspieler: höchste Siegquote im gemeinsamen Team. Härtester Gegner: niedrigste eigene Siegquote gegen ihn. Bei Gleichstand zählt die größere Spielzahl.</div></div>`;
   h+=`<div class="card"><b>Spielhistorie</b>`+(my.length?my.map(m=>{
     const inA=m.a.includes(selP),mine=inA?m.a:m.b,opp=inA?m.b:m.a,f=inA?m.sa:m.sb,a=inA?m.sb:m.sa;
@@ -209,6 +227,63 @@ function vPro(){
     return `<div class="m"><div><div>${pt.length?'mit '+pt.map(nm).join(' & '):'Einzel'}</div><div class="mu">gegen ${opp.map(nm).join(' & ')} · ${d}</div></div><div class="w" style="text-align:right">${f} : ${a} <span style="color:${f>a?'var(--ac)':'var(--rd)'}">${f>a?'S':'N'}</span></div></div>`;
   }).join(''):'<div class="mu">Noch keine Spiele.</div>')+`</div>`;
   return h;
+}
+const isToday=t=>new Date(t).toDateString()===new Date().toDateString();
+const M=()=>S.matches.filter(m=>season==='all'||(season==='heute'?isToday(m.t):new Date(m.t).getFullYear()===+season)).sort((a,b)=>a.t-b.t);
+let season='all';
+const today=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
+const matchT=()=>{const v=document.getElementById('dt').value,n=new Date();if(!v)return n.getTime();return new Date(v+'T00:00:00').getTime()+((n.getHours()*60+n.getMinutes())*60+n.getSeconds())*1000};
+const formHtml=id=>M().filter(m=>m.a.includes(id)||m.b.includes(id)).slice(-10).map(m=>{const w=m.a.includes(id)?m.sa>m.sb:m.sb>m.sa;return `<span style="display:inline-block;width:22px;height:22px;line-height:22px;text-align:center;border-radius:6px;font-size:12px;font-weight:700;margin-right:3px;color:#fff;background:${w?'var(--ac)':'var(--rd)'}">${w?'S':'N'}</span>`}).join('');
+function seasonBar(){
+  if(!['table','pro','du','hist','tm'].includes(tab))return '';
+  const ys=[...new Set([...S.matches.map(m=>new Date(m.t).getFullYear()),new Date().getFullYear()])].sort();
+  const opts=tab==='table'?['heute',...ys]:['all','heute',...ys];
+  if(!opts.includes(season)&&!opts.includes(+season))season=opts[0];
+  return `<div class="chips" style="margin-top:0">${opts.map(y=>`<span class="chip ${String(y)===String(season)?'on':''}" data-y="${y}">${y==='all'?'Gesamt':y==='heute'?'Heute':'Saison '+y}</span>`).join('')}</div>`;
+}
+function vTm(){
+  const T={};
+  M().forEach(m=>[[m.a,m.sa,m.sb],[m.b,m.sb,m.sa]].forEach(([t,f,a])=>{
+    if(t.length!==2)return;
+    const ids=[...t].sort(),k=ids.join('|');
+    const q=T[k]||(T[k]={ids,g:0,w:0,l:0,pf:0,pa:0});
+    q.g++;f>a?q.w++:q.l++;q.pf+=f;q.pa+=a;
+  }));
+  const L=Object.values(T);
+  if(!L.length)return '<div class="card">Noch keine Doppelspiele.</div>';
+  L.forEach(q=>q.r=q.w/q.g);
+  const d=q=>q.pf-q.pa;
+  L.sort((x,y)=>y.r-x.r||y.g-x.g||d(y)-d(x));
+  const mg=L.some(q=>q.g>=2)?2:1,el=L.filter(q=>q.g>=mg);
+  const best=el[0],worst=[...el].sort((x,y)=>x.r-y.r||y.g-x.g||d(x)-d(y))[0];
+  const nt=q=>q.ids.map(nm).join(' &amp; ');
+  const pc=(n,g)=>` (${fmt(n/g*100,0)}%)`;
+  const box=(t,q)=>`<div class="team"><div class="mu" style="font-weight:400">${t}</div>${nt(q)}<div class="mu" style="font-weight:400">${q.w} S / ${q.l} N (${fmt(q.r*100,0)}%)</div></div>`;
+  return `<div class="card"><div class="vs" style="grid-template-columns:1fr 1fr">${box('🏆 Bestes Team',best)}${box('🐢 Schlechtestes Team',worst)}</div><div class="mu">Gewertet ab ${mg} gemeinsamen Spielen, nach Siegquote.</div></div><div class="card tw"><table><thead><tr><th>Team</th><th>Spiele</th><th>Siege</th><th>Niederlagen</th><th>Punkte</th><th>Gegenpunkte</th><th>Differenz</th></tr></thead><tbody>${L.map(q=>`<tr><td class="n">${nt(q)}</td><td>${q.g}</td><td>${q.w}${pc(q.w,q.g)}</td><td>${q.l}${pc(q.l,q.g)}</td><td>${q.pf}</td><td>${q.pa}</td><td>${d(q)>0?'+':''}${d(q)}</td></tr>`).join('')}</tbody></table></div>`;
+}
+function vEw(){
+  if(!S.matches.length)return '<div class="card">Noch keine Spiele eingetragen.</div>';
+  const p=(n,g)=>g?` (${fmt(n/g*100,0)}%)`:'';
+  const rows=stats(S.matches).sort((x,y)=>y.w-x.w||(y.pf-y.pa)-(x.pf-x.pa)||y.pf-x.pf);
+  return `<div class="card tw"><table><thead><tr><th>Spieler</th><th>Spiele</th><th>Siege</th><th>Niederlagen</th><th>Punkte</th><th>Gegenpunkte</th><th>Differenz</th></tr></thead><tbody>`+rows.map(s=>{const d=s.pf-s.pa;return `<tr><td class="n">${esc(s.name)}</td><td>${s.g}</td><td>${s.w}${p(s.w,s.g)}</td><td>${s.l}${p(s.l,s.g)}</td><td>${s.pf}</td><td>${s.pa}</td><td>${d>0?'+':''}${d}</td></tr>`}).join('')+`</tbody></table><div class="mu" style="margin-top:8px">Alle Spiele seit Beginn, sortiert nach Siegen, dann Differenz.</div></div>`;
+}
+function vDu(){
+  if(!S.players.length)return '<div class="card">Noch keine Spieler.</div>';
+  if(!S.players.some(p=>p.id===selP))selP=S.players[0].id;
+  const o={};
+  S.players.forEach(p=>{if(p.id!==selP)o[p.id]={g:0,w:0,l:0,pf:0,pa:0}});
+  const tot={g:0,w:0,l:0,pf:0,pa:0};
+  M().forEach(m=>{
+    const inA=m.a.includes(selP),inB=m.b.includes(selP);if(!inA&&!inB)return;
+    const f=inA?m.sa:m.sb,a=inA?m.sb:m.sa,opp=inA?m.b:m.a,win=f>a;
+    tot.g++;win?tot.w++:tot.l++;tot.pf+=f;tot.pa+=a;
+    opp.forEach(id=>{const q=o[id];if(!q)return;q.g++;win?q.w++:q.l++;q.pf+=f;q.pa+=a});
+  });
+  const pc=(n,g)=>g?` (${fmt(n/g*100,0)}%)`:'';
+  const row=(name,q,b)=>{const d=q.pf-q.pa;return `<tr${b?' style="font-weight:700"':''}><td class="n">${name}</td><td>${q.g}</td><td>${q.w}${pc(q.w,q.g)}</td><td>${q.l}${pc(q.l,q.g)}</td><td>${q.pf}</td><td>${q.pa}</td><td>${d>0?'+':''}${d}</td></tr>`};
+  const list=Object.entries(o).filter(([,q])=>q.g>0).sort((x,y)=>y[1].g-x[1].g);
+  return `<div class="card"><select id="ps">${S.players.map(p=>`<option value="${p.id}" ${p.id===selP?'selected':''}>${esc(p.name)}</option>`).join('')}</select></div>`+
+  (tot.g?`<div class="card tw"><table><thead><tr><th>Gegner</th><th>Spiele</th><th>Siege</th><th>Niederlagen</th><th>Punkte</th><th>Gegenpunkte</th><th>Differenz</th></tr></thead><tbody>${list.map(([id,q])=>row(nm(id),q,false)).join('')}${row('Gesamt',tot,true)}</tbody></table><div class="mu" style="margin-top:8px">Bilanz aus Sicht des gewählten Spielers. Im Doppel zählt jedes Spiel gegen beide Gegner; „Gesamt“ zählt jedes Spiel nur einmal.</div></div>`:'<div class="card">Dieser Spieler hat noch keine Spiele.</div>');
 }
 function vPl(){if(ro)return roMsg();
   return `<div class="card"><div class="row"><input id="np" placeholder="Name des neuen Spielers" maxlength="30"><button class="pri" id="add">Hinzufügen</button></div></div>
@@ -236,15 +311,16 @@ function bindPl(){
 function render(){
   nav();
   const v=document.getElementById('v');
-  const keep=['sa','sb','np'].map(i=>{const e=document.getElementById(i);return e?e.value:''});
+  const keep=['sa','sb','np','dt'].map(i=>{const e=document.getElementById(i);return e?e.value:''});
   const had=document.activeElement&&document.activeElement.id;
-  v.innerHTML=(NOTE?`<div class="mu" style="margin-bottom:8px">${NOTE}</div>`:'')+{play:vPlay,table:vTable,pro:vPro,hist:vHist,pl:vPl}[tab]();
-  ['sa','sb','np'].forEach((i,k)=>{const e=document.getElementById(i);if(e&&keep[k])e.value=keep[k]});
+  v.innerHTML=(NOTE?`<div class="mu" style="margin-bottom:8px">${NOTE}</div>`:'')+seasonBar()+{play:vPlay,table:vTable,ew:vEw,pro:vPro,du:vDu,tm:vTm,hist:vHist,pl:vPl}[tab]();
+  ['sa','sb','np','dt'].forEach((i,k)=>{const e=document.getElementById(i);if(e&&keep[k])e.value=keep[k]});
   if(had){const e=document.getElementById(had);if(e&&e.tagName==='INPUT')e.focus()}
   if(tab==='play')bindPlay();
   if(tab==='pl'&&!ro)bindPl();
+  document.querySelectorAll('[data-y]').forEach(b=>b.onclick=()=>{season=b.dataset.y;render()});
   if(tab==='table')document.querySelectorAll('th[data-k]').forEach(t=>t.onclick=()=>{const k=t.dataset.k;if(sortK===k)sortD*=-1;else{sortK=k;sortD=k==='name'?1:-1}render()});
-  if(tab==='pro'){const ps=document.getElementById('ps');if(ps)ps.onchange=()=>{selP=ps.value;render()}}
+  if(tab==='pro'||tab==='du'){const ps=document.getElementById('ps');if(ps)ps.onchange=()=>{selP=ps.value;render()}}
   if(tab==='hist')document.querySelectorAll('[data-d]').forEach(b=>b.onclick=()=>{if(confirm('Spiel löschen?')){delMatch(b.dataset.d);render()}});
 }
 render();
