@@ -48,6 +48,25 @@ td.n{font-weight:600}
 <div id="v"></div>
 </main>
 <script>
+window.__fbP=(async()=>{
+  const V='10.14.1',B='https://www.gstatic.com/firebasejs/'+V+'/';
+  const [app,fs]=await Promise.all([import(B+'firebase-app.js'),import(B+'firebase-firestore.js')]);
+  const a=app.initializeApp({
+    apiKey:"AIzaSyDbRagfiIc0shyIPTAP_CTROYVesNsH1CA",
+    authDomain:"pickleball-tracker-ccacf.firebaseapp.com",
+    projectId:"pickleball-tracker-ccacf",
+    storageBucket:"pickleball-tracker-ccacf.firebasestorage.app",
+    messagingSenderId:"969655317847",
+    appId:"1:969655317847:web:5c5bbbd301f4b49863fa12"
+  });
+  const d=fs.getFirestore(a);
+  return{
+    doc:p=>({set:x=>fs.setDoc(fs.doc(d,p),x),delete:()=>fs.deleteDoc(fs.doc(d,p))}),
+    collection:n=>({onSnapshot:(ok,er)=>fs.onSnapshot(fs.collection(d,n),ok,er)})
+  };
+})();
+</script>
+<script>
 const KEY='pb-tracker-v1';
 let S={players:[],matches:[]};
 try{const r=localStorage.getItem(KEY);if(r)S=JSON.parse(r)}catch(e){}
@@ -55,7 +74,7 @@ if(!S.players)S.players=[];if(!S.matches)S.matches=[];
 let tab='play',present=new Set(),cur=null,sortK='avgPts',sortD=-1;
 const uid=()=>Math.random().toString(36).slice(2,9);
 let DB=null,ro=false,NOTE='';
-const dbw=p=>p.catch(()=>alert('Speichern fehlgeschlagen. Fehlen dir eventuell die Bearbeitungsrechte?'));
+const dbw=p=>p.catch(e=>alert('Speichern fehlgeschlagen: '+(e&&(e.code||e.message)||e)));
 const save=()=>{if(DB)return;try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}};
 function addPlayer(p){S.players.push(p);save();if(DB)dbw(DB.doc('players/'+p.id).set({name:p.name}))}
 function delMatch(id){S.matches=S.matches.filter(m=>m.id!==id);save();if(DB)dbw(DB.doc('matches/'+id).delete())}
@@ -66,17 +85,15 @@ function roMsg(){return '<div class="card">👀 Du hast Leserechte: Tabelle und 
 (async()=>{
  await 0;
  try{
-  if(typeof claude==='undefined'||!claude.use){return}
-  const [db,user]=await Promise.all([claude.use('db'),claude.use('user')]);
-  if(user){try{if(await user.can('data.write')===false){ro=true;tab='table'}}catch(e){}}
-  if(!db){NOTE='Offline-Modus: Daten liegen nur auf diesem Gerät.';render();return}
-  DB=db;S={players:[],matches:[]};NOTE='Lade Daten…';render();
+  DB=await window.__fbP;
+  S={players:[],matches:[]};NOTE='Lade Daten…';render();
   const tm=setTimeout(()=>{NOTE='Daten noch nicht erreichbar, Stand evtl. veraltet.';render()},10000);
-  const er=()=>{clearTimeout(tm);NOTE='Fehler beim Laden der Daten.';render()};
-  db.collection('players').onSnapshot(s=>{clearTimeout(tm);NOTE='';S.players=s.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>a.name.localeCompare(b.name));render()},er);
-  db.collection('matches').onSnapshot(s=>{clearTimeout(tm);NOTE='';S.matches=s.docs.map(d=>({id:d.id,...d.data()})).sort((x,y)=>x.t-y.t);render()},er);
- }catch(e){}
+  const er=()=>{clearTimeout(tm);NOTE='Fehler beim Laden der Daten. Prüfe die Firestore-Regeln.';render()};
+  DB.collection('players').onSnapshot(s=>{clearTimeout(tm);NOTE='';S.players=s.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>a.name.localeCompare(b.name));render()},er);
+  DB.collection('matches').onSnapshot(s=>{clearTimeout(tm);NOTE='';S.matches=s.docs.map(d=>({id:d.id,...d.data()})).sort((x,y)=>x.t-y.t);render()},er);
+ }catch(e){DB=null;NOTE='Offline-Modus: Keine Verbindung zur Datenbank, Daten liegen nur auf diesem Gerät.';render()}
 })();
+
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const nm=id=>{const p=S.players.find(p=>p.id===id);return p?esc(p.name):'?'};
 const fmt=(n,d=1)=>isFinite(n)?n.toFixed(d).replace('.',','):'–';
